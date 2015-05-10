@@ -32,6 +32,12 @@ std::mt19937 gen(rd());
 std::bernoulli_distribution d(0.5);
 
 //-------------------------
+inline bool operator<(const vertex& x, const vertex& y) {return x.w < y.w;}
+inline bool operator> (const vertex& lhs, const vertex& rhs){return rhs < lhs;}
+inline bool operator<=(const vertex& lhs, const vertex& rhs){return !(lhs > rhs);}
+inline bool operator>=(const vertex& lhs, const vertex& rhs){return !(lhs < rhs);}
+inline bool operator==(const vertex& lhs, const vertex& rhs){return lhs.w == rhs.w;}
+inline bool operator!=(const vertex& lhs, const vertex& rhs){return !(lhs == rhs);}
 
 
 inline double fractional(double z)
@@ -66,6 +72,20 @@ inline vertex right_from_left(vertex v0, vertex vleft)
   return v_new;
 }
 
+vertex max_neighbor(vertex v)
+{
+  vertex vl = left(v);
+  vertex vr = right_from_left(v, vl);
+  if (vl > vr)
+    return vl;
+  else
+    return vr;
+}
+
+
+
+
+
 vertex follow_sequence(vector<bool> vec)
 {
   vertex v = initial;
@@ -80,15 +100,9 @@ vertex follow_sequence(vector<bool> vec)
   return v;
 }
 
-double follow_sequence_weight(vector<bool> vec)
+vertex lower_bound(unsigned int L)
 {
-  vertex v = follow_sequence(vec);
-  return v.w;
-}
-
-double lower_bound(unsigned int L)
-{
-  double H = -INFINITY;
+  vertex ret = {0.0, -INFINITY, 0};
   vector<bool> vec;
   vec.reserve(L-2);
   for(int i = 0; i < 100000; i++)
@@ -98,19 +112,23 @@ double lower_bound(unsigned int L)
         {
           vec.push_back(d(gen));
         }
-      H = fmax(H, follow_sequence_weight(vec));
+      vertex nominal = follow_sequence(vec);
+      if (nominal > ret)
+        ret = nominal;
     }
-  return H;
+  return ret;
 }
 
-double transform(double K, double L)
+double weight_transform(vertex v)
 {
+  double K = v.w;
+  double L = v.l;
   return (K+(L-1.0))/L;
 }
 
-double find_with_lower_bound(int L, double H)
+vertex find_with_lower_bound(int L, vertex v_bound)
 {
-  double K = H;
+  vertex ret = v_bound;
   queue<vertex> Q;
   Q.push(initial);
 
@@ -120,45 +138,51 @@ double find_with_lower_bound(int L, double H)
       vertex v = Q.front();
       Q.pop();
 
-      double w = v.w;
-      double l = v.l;
-
       i++;
 
-      if (i % 10000 == 0)
+      if (i % 100000 == 0)
         {
-          cout << "Q.size = " << Q.size() << "      ";
-          cout << "Level = " << l << endl;
+          // cout << "Q.size = " << Q.size() << "      ";
+          // cout << "Level = " << v.l << endl;
         } 
 
-      if (l == L)
+      if (v.l == L)
         {
-          if (w > K)
-            K = w;
+          if (v > ret)
+              ret = v;
         }
       else
         {
           vertex vleft = left(v);
           vertex vright = right_from_left(v, vleft);
 
-          if (vleft.w > K)
+          if (vleft > ret)
             Q.push(vleft);
-          if (vright.w > K)
+          if (vright > ret)
             Q.push(vright);
         }
     }
-  return transform(K,L);
+  return ret;
 }
 
 
 
 int main()
 {
-  int L;
-  cout << "Enter a value for L: ";
-  cin >> L;
+  int Lmax;
+  cout << "Enter a value for Lmax: ";
+  cin >> Lmax;
 
-  double H = lower_bound(L);
-  cout << "The lower bound is: " << transform(H,L) << endl;
-  cout << find_with_lower_bound(L,H) << endl;
+cout << "L = " << 1 << "    Max = " << -1 << endl;
+cout << "L = " << 2 << "    Max = " << -0.5 << endl;
+  vertex vbest = initial;
+  vertex vbound;
+  for (int L = 3; L <= Lmax; L++)
+    {
+      vbound = max_neighbor(vbest);
+      vbest = find_with_lower_bound(L, vbound);
+      cout << "L = " << L << "    Max = " << weight_transform(vbest) << endl;
+      vbound = vbest;
+    }
+  return 0;
 }
