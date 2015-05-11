@@ -35,6 +35,9 @@ static const vertex initial = {0.25, -2.0, 2};
 
 static const int nr_threads = 7;
 
+vector<vertex> rets;
+vector<vertex> nexts;
+
 static std::mutex barrier;
 
 //-------------------------
@@ -108,33 +111,42 @@ void worker(ConcurrentQueue<int> &Q, int j)
   return;
 }
 
-void worker2(int L, vertex &ret, ConcurrentQueue<vertex> &Q)
+void worker2(int L, vertex &ret, ConcurrentQueue<vertex> &Q, vertex& next_bound, int id)
 {
   vertex v;
+  vertex ret2 = ret;
+  vertex next_bound2 = next_bound;
   
   while(Q.try_dequeue(v))
     {
       if (v.l == L)
         {
-          barrier.lock();
-          if (v > ret)
-            ret = v;
-          barrier.unlock();
+          if (v > ret2)
+            ret2 = v;
+
+          vertex t = max_neighbor(v);
+          if (t > next_bound2)
+            next_bound2 = t;
         }
       vertex vleft = left(v);
       vertex vright = right_from_left(v, vleft);
-      if (vleft > ret)
+      if (vleft > ret2)
         Q.enqueue(vleft);
-      if (vright > ret)
+      if (vright > ret2)
         Q.enqueue(vright);
     }
+  rets[id] = ret2;
+  nexts[id] = next_bound2;
+  return;
 }
 
 
 
-vertex find_with_lower_bound(int L, vertex v_bound)
+vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
 {
   vertex ret = v_bound;
+  next_bound = max_neighbor(ret);
+  
   ConcurrentQueue<vertex> Q;
   Q.enqueue(initial);
 
@@ -151,6 +163,10 @@ vertex find_with_lower_bound(int L, vertex v_bound)
         {
           if (v > ret)
             ret = v;
+
+          vertex t = max_neighbor(v);
+          if (t > next_bound)
+            next_bound = t;
         }
       else
         {
@@ -166,16 +182,24 @@ vertex find_with_lower_bound(int L, vertex v_bound)
     return ret;
   else
     {
-      // cout << "********************************************" << endl;
-      // cout << "PARALLEL!!" << endl;
-      // cout << "********************************************" << endl;
       vector<thread> th;
 
       for (int i = 0; i < nr_threads; i++)
-        th.push_back(thread(worker2, L, ref(ret), ref(Q)));
+        th.push_back(thread(worker2, L, ref(ret), ref(Q), ref(next_bound), i));
 
       for(auto &t : th)
         t.join();
+
+      ret = rets[0];
+      next_bound = nexts[0];
+
+      for(auto v : rets)
+        if (v > ret)
+          ret = v;
+
+      for(auto v: nexts)
+        if (v > next_bound)
+          next_bound = v;
 
       return ret;
     }
@@ -188,20 +212,19 @@ vertex find_with_lower_bound(int L, vertex v_bound)
 int main(int argc, char* argv[])
 {
   int Lmax = std::stoi(std::string(argv[1]));
+  rets.reserve(nr_threads);
+  nexts.reserve(nr_threads);
   
-  // cout << "Enter a value for Lmax: ";
-  // cin >> Lmax;
-
   cout << "L = " << 1 << "    Max = " << -1 << endl;
   cout << "L = " << 2 << "    Max = " << -0.5 << endl;
-  vertex vbest = initial;
-  vertex vbound;
+    vertex vbest = initial;
+  vertex vbound = max_neighbor(initial);
+  vertex v;
   for (int L = 3; L <= Lmax; L++)
     {
-      vbound = max_neighbor(vbest);
-      vbest = find_with_lower_bound(L, vbound);
+      vbest = find_with_lower_bound(L, vbound, v);
       cout << "L = " << L << "    Max = " << weight_transform(vbest) << endl;
-      vbound = vbest;
+      vbound = v;
     }
   return 0;
 }
