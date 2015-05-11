@@ -111,7 +111,7 @@ void worker(ConcurrentQueue<int> &Q, int j)
   return;
 }
 
-void worker2(int L, vertex &ret, ConcurrentQueue<vertex> &Q, vertex& next_bound, int id)
+void worker2(int L, vertex ret, ConcurrentQueue<vertex> &Q, vertex next_bound, int id)
 {
   vertex v;
   vertex ret2 = ret;
@@ -121,6 +121,7 @@ void worker2(int L, vertex &ret, ConcurrentQueue<vertex> &Q, vertex& next_bound,
     {
       if (v.l == L)
         {
+          cout << "Received root; weight = " << v.w << "   had ret2 = " << ret2.w << endl;
           if (v > ret2)
             ret2 = v;
 
@@ -128,6 +129,7 @@ void worker2(int L, vertex &ret, ConcurrentQueue<vertex> &Q, vertex& next_bound,
           if (t > next_bound2)
             next_bound2 = t;
         }
+        
       vertex vleft = left(v);
       vertex vright = right_from_left(v, vleft);
       if (vleft > ret2)
@@ -135,8 +137,12 @@ void worker2(int L, vertex &ret, ConcurrentQueue<vertex> &Q, vertex& next_bound,
       if (vright > ret2)
         Q.enqueue(vright);
     }
+  barrier.lock();
+  cout << "Writing ret2 = " << ret2.w << " into id = " << id;
+  cout << "           I received ret = " << ret.w << endl;
   rets[id] = ret2;
   nexts[id] = next_bound2;
+  barrier.unlock();
   return;
 }
 
@@ -150,14 +156,17 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
   ConcurrentQueue<vertex> Q;
   Q.enqueue(initial);
 
-  bool flag = false;
+  bool flag = true;
 
   while(Q.size_approx() < 10000)
     {
       vertex v;
       flag = Q.try_dequeue(v);
       if (flag == false)
-        break;
+        {
+          cout << "Q.size.approx = " << Q.size_approx() << endl;
+          break; 
+        }
 
       if (v.l == L)
         {
@@ -182,10 +191,11 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
     return ret;
   else
     {
+      cout << "********** START OF PARALLEL *******************" << endl;
       vector<thread> th;
 
       for (int i = 0; i < nr_threads; i++)
-        th.push_back(thread(worker2, L, ref(ret), ref(Q), ref(next_bound), i));
+        th.push_back(thread(worker2, L, ret, ref(Q), next_bound, i));
 
       for(auto &t : th)
         t.join();
@@ -193,9 +203,13 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
       ret = rets[0];
       next_bound = nexts[0];
 
-      for(auto v : rets)
-        if (v > ret)
-          ret = v;
+      cout << "********** END OF PARALLEL *******************" << endl;
+      for (int r = 0; r < nr_threads; r++)
+        {
+          // cout << rets[r].w << endl;
+          if (rets[r] > ret)
+            ret = rets[r];
+        }
 
       for(auto v: nexts)
         if (v > next_bound)
@@ -224,6 +238,7 @@ int main(int argc, char* argv[])
     {
       vbest = find_with_lower_bound(L, vbound, v);
       cout << "L = " << L << "    Max = " << weight_transform(vbest) << endl;
+      cout << endl << endl;
       vbound = v;
     }
   return 0;
