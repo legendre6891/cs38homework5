@@ -2,9 +2,10 @@
 #include <iostream>
 #include <cmath>
 #include <vector>
-#include <random>
 #include <queue>
-
+#include <thread>
+#include "concurrentqueue.h"
+#include <mutex>
 
 using std::cout;
 using std::cin;
@@ -14,6 +15,11 @@ using std::endl;
 using std::vector;
 using std::fmax;
 using std::queue;
+using std::thread;
+using std::ref;
+using std::mutex;
+
+using moodycamel::ConcurrentQueue;
 
 //-------------------------
 struct vertex_ {
@@ -21,15 +27,13 @@ struct vertex_ {
   double w;
   unsigned int l;
 };
-
 typedef struct vertex_ vertex;
 
 static const vertex initial = {0.25, -2.0, 2};
 
+static const int nr_threads = 7;
 
-std::random_device rd;
-std::mt19937 gen(rd());
-std::bernoulli_distribution d(0.5);
+static std::mutex barrier;
 
 //-------------------------
 inline bool operator<(const vertex& x, const vertex& y) {return x.w < y.w;}
@@ -83,42 +87,6 @@ vertex max_neighbor(vertex v)
 }
 
 
-
-
-
-vertex follow_sequence(vector<bool> vec)
-{
-  vertex v = initial;
-  for (bool b : vec)
-    {
-      vertex vleft = left(v);
-      if (b)
-        v = left(v);
-      else
-        v = right_from_left(v, vleft);
-    }
-  return v;
-}
-
-vertex lower_bound(unsigned int L)
-{
-  vertex ret = {0.0, -INFINITY, 0};
-  vector<bool> vec;
-  vec.reserve(L-2);
-  for(int i = 0; i < 100000; i++)
-    {
-      vec.clear();
-      for(int j = 0; j < L-2; j++)
-        {
-          vec.push_back(d(gen));
-        }
-      vertex nominal = follow_sequence(vec);
-      if (nominal > ret)
-        ret = nominal;
-    }
-  return ret;
-}
-
 double weight_transform(vertex v)
 {
   double K = v.w;
@@ -126,55 +94,107 @@ double weight_transform(vertex v)
   return (K+(L-1.0))/L;
 }
 
+
+
+
+
+//---------------------------------------------------------
+void worker(ConcurrentQueue<int> &Q, int j)
+{
+
+  Q.enqueue(j);
+  return;
+}
+
+void worker2(int L, vertex &ret, ConcurrentQueue<vertex> &Q)
+{
+  vertex v;
+  
+  while(Q.try_dequeue(v))
+    {
+      if (v.l == L)
+        {
+          barrier.lock();
+          if (v > ret)
+            ret = v;
+          barrier.unlock();
+        }
+      vertex vleft = left(v);
+      vertex vright = right_from_left(v, vleft);
+      if (vleft > ret)
+        Q.enqueue(vleft);
+      if (vright > ret)
+        Q.enqueue(vright);
+    }
+}
+
+
+
 vertex find_with_lower_bound(int L, vertex v_bound)
 {
   vertex ret = v_bound;
-  queue<vertex> Q;
-  Q.push(initial);
+  ConcurrentQueue<vertex> Q;
+  Q.enqueue(initial);
 
-  unsigned int i = 0;
-  while(Q.empty() == false)
+  bool flag = false;
+
+  while(Q.size_approx() < 10000)
     {
-      vertex v = Q.front();
-      Q.pop();
-
-      i++;
-
-      if (i % 100000 == 0)
-        {
-          // cout << "Q.size = " << Q.size() << "      ";
-          // cout << "Level = " << v.l << endl;
-        } 
+      vertex v;
+      flag = Q.try_dequeue(v);
+      if (flag == false)
+        break;
 
       if (v.l == L)
         {
           if (v > ret)
-              ret = v;
+            ret = v;
         }
       else
         {
           vertex vleft = left(v);
           vertex vright = right_from_left(v, vleft);
-
           if (vleft > ret)
-            Q.push(vleft);
+              Q.enqueue(vleft);
           if (vright > ret)
-            Q.push(vright);
+              Q.enqueue(vright);
         }
     }
-  return ret;
+  if (flag == false)
+    return ret;
+  else
+    {
+      // cout << "********************************************" << endl;
+      // cout << "PARALLEL!!" << endl;
+      // cout << "********************************************" << endl;
+      vector<thread> th;
+
+      for (int i = 0; i < nr_threads; i++)
+        th.push_back(thread(worker2, L, ref(ret), ref(Q)));
+
+      for(auto &t : th)
+        t.join();
+
+      return ret;
+    }
+  
 }
 
 
+//---------------------------------------------------------
 
 int main()
 {
+
+
+
+  
   int Lmax;
   cout << "Enter a value for Lmax: ";
   cin >> Lmax;
 
-cout << "L = " << 1 << "    Max = " << -1 << endl;
-cout << "L = " << 2 << "    Max = " << -0.5 << endl;
+  cout << "L = " << 1 << "    Max = " << -1 << endl;
+  cout << "L = " << 2 << "    Max = " << -0.5 << endl;
   vertex vbest = initial;
   vertex vbound;
   for (int L = 3; L <= Lmax; L++)
