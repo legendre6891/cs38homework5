@@ -6,6 +6,7 @@
 #include <thread>
 #include "concurrentqueue.h"
 #include <mutex>
+#include <string>
 
 using std::cout;
 using std::cin;
@@ -18,6 +19,7 @@ using std::queue;
 using std::thread;
 using std::ref;
 using std::mutex;
+using std::string;
 
 using moodycamel::ConcurrentQueue;
 
@@ -183,15 +185,12 @@ vertex find_with_lower_bound(int L, vertex v_bound)
 
 //---------------------------------------------------------
 
-int main()
+int main(int argc, char* argv[])
 {
-
-
-
+  int Lmax = std::stoi(std::string(argv[1]));
   
-  int Lmax;
-  cout << "Enter a value for Lmax: ";
-  cin >> Lmax;
+  // cout << "Enter a value for Lmax: ";
+  // cin >> Lmax;
 
   cout << "L = " << 1 << "    Max = " << -1 << endl;
   cout << "L = " << 2 << "    Max = " << -0.5 << endl;
