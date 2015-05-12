@@ -8,6 +8,10 @@
 #include <mutex>
 #include <string>
 
+
+#define DEBUG 0
+
+
 using std::cout;
 using std::cin;
 using std::cos;
@@ -33,7 +37,7 @@ typedef struct vertex_ vertex;
 
 static const vertex initial = {0.25, -2.0, 2};
 
-static const int nr_threads = 7;
+static const int nr_threads = 15;
 
 vector<vertex> rets;
 vector<vertex> nexts;
@@ -121,7 +125,8 @@ void worker2(int L, vertex ret, ConcurrentQueue<vertex> &Q, vertex next_bound, i
     {
       if (v.l == L)
         {
-          cout << "Received root; weight = " << v.w << "   had ret2 = " << ret2.w << endl;
+	  if (DEBUG)
+	    cout << "Received root; weight = " << v.w << "   had ret2 = " << ret2.w << endl;
           if (v > ret2)
             ret2 = v;
 
@@ -138,8 +143,11 @@ void worker2(int L, vertex ret, ConcurrentQueue<vertex> &Q, vertex next_bound, i
         Q.enqueue(vright);
     }
   barrier.lock();
-  cout << "Writing ret2 = " << ret2.w << " into id = " << id;
-  cout << "           I received ret = " << ret.w << endl;
+  if (DEBUG)
+    {
+      cout << "Writing ret2 = " << ret2.w << " into id = " << id;
+      cout << "           I received ret = " << ret.w << endl;
+    }
   rets[id] = ret2;
   nexts[id] = next_bound2;
   barrier.unlock();
@@ -164,7 +172,8 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
       flag = Q.try_dequeue(v);
       if (flag == false)
         {
-          cout << "Q.size.approx = " << Q.size_approx() << endl;
+	  if (DEBUG)
+	    cout << "Q.size.approx = " << Q.size_approx() << endl;
           break; 
         }
 
@@ -191,7 +200,9 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
     return ret;
   else
     {
-      cout << "********** START OF PARALLEL *******************" << endl;
+      if (DEBUG)
+	cout << "********** START OF PARALLEL *******************" << endl;
+
       vector<thread> th;
 
       for (int i = 0; i < nr_threads; i++)
@@ -203,7 +214,9 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
       ret = rets[0];
       next_bound = nexts[0];
 
-      cout << "********** END OF PARALLEL *******************" << endl;
+      if (DEBUG)
+	cout << "********** END OF PARALLEL *******************" << endl;
+
       for (int r = 0; r < nr_threads; r++)
         {
           // cout << rets[r].w << endl;
@@ -238,7 +251,8 @@ int main(int argc, char* argv[])
     {
       vbest = find_with_lower_bound(L, vbound, v);
       cout << "L = " << L << "    Max = " << weight_transform(vbest) << endl;
-      cout << endl << endl;
+      if (DEBUG)
+	cout << endl << endl;
       vbound = v;
     }
   return 0;
