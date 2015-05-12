@@ -7,6 +7,10 @@
 #include "concurrentqueue.h"
 #include <mutex>
 #include <string>
+#include <cstddef>
+#include <ios>
+#include <sstream>
+ #include <iomanip>
 
 
 #define DEBUG 0
@@ -31,13 +35,13 @@ using moodycamel::ConcurrentQueue;
 struct vertex_ {
   double z;
   double w;
-  unsigned int l;
+  int l;
 };
 typedef struct vertex_ vertex;
 
 static const vertex initial = {0.25, -2.0, 2};
 
-static const int nr_threads = 15;
+static const int nr_threads = 7;
 
 vector<vertex> rets;
 vector<vertex> nexts;
@@ -56,14 +60,14 @@ inline bool operator!=(const vertex& lhs, const vertex& rhs){return !(lhs == rhs
 inline double fractional(double z)
 {
   double i;
-  return modf(z, &i);
+  return (double) modf(z, &i);
 }
 
 inline vertex left(vertex v)
 {
   double z_new = fractional(5.0 * v.z)/2.0;
   double w_new = v.w - 1.0 + cos(2*M_PI*z_new);
-  double l_new = v.l + 1;
+  int l_new = v.l + 1;
 
   vertex v_new;
   v_new.z = z_new;
@@ -76,7 +80,7 @@ inline vertex right_from_left(vertex v0, vertex vleft)
 {
   double z_new = vleft.z + 0.5;
   double w_new = v0.w - 1.0 + cos(2*M_PI*z_new);
-  double l_new = v0.l + 1;
+  int l_new = v0.l + 1;
 
   vertex v_new;
   v_new.z = z_new;
@@ -125,8 +129,8 @@ void worker2(int L, vertex ret, ConcurrentQueue<vertex> &Q, vertex next_bound, i
     {
       if (v.l == L)
         {
-	  if (DEBUG)
-	    cout << "Received root; weight = " << v.w << "   had ret2 = " << ret2.w << endl;
+	  // if (DEBUG)
+	  //   cout << "Received root; weight = " << v.w << "   had ret2 = " << ret2.w << endl;
           if (v > ret2)
             ret2 = v;
 
@@ -143,11 +147,11 @@ void worker2(int L, vertex ret, ConcurrentQueue<vertex> &Q, vertex next_bound, i
         Q.enqueue(vright);
     }
   barrier.lock();
-  if (DEBUG)
-    {
-      cout << "Writing ret2 = " << ret2.w << " into id = " << id;
-      cout << "           I received ret = " << ret.w << endl;
-    }
+  // if (DEBUG)
+  //   {
+  //     cout << "Writing ret2 = " << ret2.w << " into id = " << id;
+  //     cout << "           I received ret = " << ret.w << endl;
+  //   }
   rets[id] = ret2;
   nexts[id] = next_bound2;
   barrier.unlock();
@@ -172,8 +176,8 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
       flag = Q.try_dequeue(v);
       if (flag == false)
         {
-	  if (DEBUG)
-	    cout << "Q.size.approx = " << Q.size_approx() << endl;
+	  // if (DEBUG)
+	  //   cout << "Q.size.approx = " << Q.size_approx() << endl;
           break; 
         }
 
@@ -200,8 +204,8 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
     return ret;
   else
     {
-      if (DEBUG)
-	cout << "********** START OF PARALLEL *******************" << endl;
+      // if (DEBUG)
+      //   cout << "********** START OF PARALLEL *******************" << endl;
 
       vector<thread> th;
 
@@ -214,8 +218,8 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
       ret = rets[0];
       next_bound = nexts[0];
 
-      if (DEBUG)
-	cout << "********** END OF PARALLEL *******************" << endl;
+      // if (DEBUG)
+      //   cout << "********** END OF PARALLEL *******************" << endl;
 
       for (int r = 0; r < nr_threads; r++)
         {
@@ -238,6 +242,8 @@ vertex find_with_lower_bound(int L, vertex v_bound, vertex& next_bound)
 
 int main(int argc, char* argv[])
 {
+  cout << "double: " << std::numeric_limits<double>::min();
+  cout.precision(std::numeric_limits<double>::digits10+1);
   int Lmax = std::stoi(std::string(argv[1]));
   rets.reserve(nr_threads);
   nexts.reserve(nr_threads);
@@ -250,9 +256,10 @@ int main(int argc, char* argv[])
   for (int L = 3; L <= Lmax; L++)
     {
       vbest = find_with_lower_bound(L, vbound, v);
-      cout << "L = " << L << "    Max = " << weight_transform(vbest) << endl;
-      if (DEBUG)
-	cout << endl << endl;
+      cout << "L = " << L << "\tMax = " << weight_transform(vbest)
+           << "\twith z  = " << vbest.z << endl;
+      // if (DEBUG)
+      //   cout << endl << endl;
       vbound = v;
     }
   return 0;
